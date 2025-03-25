@@ -1,13 +1,14 @@
 import asyncio
 from aioartnet_local.aioartnet.aio_artnet import ArtNetNode
-# from yeelight import Bulb, discover_bulbs
+from yeelight import discover_bulbs
 import sys
 import struct
 import logging
 from aioartnet import ArtNetClient
 from aioartnet.aio_artnet import swap16
-from pyyeelight.yeelight.aio import AsyncBulb
+from yeelight.aio import AsyncBulb
 import time
+from config import BULBS_INFO, DMX_START_ADDRESS, CHANNELS_PER_BULB, INPUT_FLOWS
 
 # Configure logging for the current script
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 
 # Create a formatter
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s')
 
 # Add the formatter to the console handler
 ch.setFormatter(formatter)
@@ -31,7 +32,8 @@ logging.getLogger('aioartnet').setLevel(logging.INFO)
 logging.getLogger('yeelight').setLevel(logging.DEBUG)
 
 def do_nothing(param):
-    pass
+    logger.debug("do_nothing called with param: %s", param)
+
 
 # Add these variables at module level
 bulb_queues = {}
@@ -51,41 +53,49 @@ async def initialize_bulbs(bulbs_info):
         try:
             await bulb.async_listen(do_nothing)
             await asyncio.sleep(1)
-            await bulb.async_stop_music()
-            await bulb.async_set_brightness(100)
-            await bulb.async_start_music()
+            # await bulb.async_stop_music()
+            # logger.info(f"Bulb {ip} stopped music")
             # await asyncio.sleep(1)
+            await bulb.async_set_brightness(100)
+            logger.info(f"Bulb {ip} set brightness to 100")
+            await asyncio.sleep(1)
+            await bulb.async_start_music()
+            await asyncio.sleep(1)
             # await bulb.async_turn_on()
             await asyncio.sleep(1)
             bulbs.append(bulb)
         except Exception as e:
             logger.error(f"Error initializing bulb at {ip}: {e}")
             raise e
-    
+
     logger.info(f"Found {len(bulbs)} bulb(s): {[bulb._ip for bulb in bulbs]}")
     return bulbs
 
-def create_dmx_mapping(bulbs, start_address=1, channels_per_bulb=5):
+def create_dmx_mapping(bulbs, bulbs_info, channels_per_bulb=5):
     """Create mapping between DMX channels and bulbs
     
     Args:
         bulbs (list): List of AsyncBulb objects
-        start_address (int): Starting DMX address
+        bulbs_info (list): List of dictionaries containing bulb configuration
         channels_per_bulb (int): Number of channels per bulb
     Returns:
         dict: Mapping of bulbs to their DMX channels
     """
     dmx_mapping = {}
-    for index, bulb in enumerate(bulbs):
-        dmx_start = start_address + index * channels_per_bulb
+    max_channel = 0
+
+    for bulb, info in zip(bulbs, bulbs_info):
+        dmx_start = info['dmx_start']
+        max_channel = max(max_channel, dmx_start + channels_per_bulb - 1)
+
         dmx_mapping[bulb] = {
             'r': dmx_start,
             'g': dmx_start + 1,
             'b': dmx_start + 2,
             'brightness': dmx_start + 4
         }
-    max_channel = start_address + len(bulbs) * channels_per_bulb - 1
-    logger.info(f"DMX channels used: {start_address}-{max_channel}")
+
+    logger.info(f"DMX channels used: 1-{max_channel}")
     return dmx_mapping
 
 async def update_bulb_color(bulb, r, g, b, brightness):
@@ -119,29 +129,55 @@ async def update_bulb_color(bulb, r, g, b, brightness):
 async def bulb_state_worker(bulb):
     """Worker that processes the state updates for a specific bulb"""
     queue = bulb_queues[bulb]
-    
+    prev_r = prev_g = prev_b = prev_brightness = None
+
     while True:
         try:
             # Wait for the next state update
             r, g, b, brightness = await queue.get()
-            
+
             try:
-                brightness_percent = max(min(int((brightness / 255) * 100), 100), 1)
-                
-                # Apply the state change
-                await bulb.async_set_rgb(r, g, b, effect="sudden", duration=0)
-                await bulb.async_set_brightness(brightness, effect="sudden", duration=200)
-                
+                brightness_percent = max(min(int((brightness / 128) * 100), 100), 0)
+                logger.debug(f'brightness_percent is {brightness_percent}')
+
+                # Check RGB difference
+                if (r, g, b) != (prev_r, prev_g, prev_b):
+                    rgb_diff = max(
+                        abs(r - (prev_r or 0)),
+                        abs(g - (prev_g or 0)),
+                        abs(b - (prev_b or 0))
+                    )
+                    duration = 200 if rgb_diff < 20 else 0
+                    duration = 0
+                    await bulb.async_set_rgb(r, g, b, effect="sudden", duration=duration)
+                    prev_r, prev_g, prev_b = r, g, b
+
+                # Check brightness difference
+                # if brightness != prev_brightness:
+                #     bright_diff = abs(brightness - (prev_brightness or 0))
+                #     duration = 200 if bright_diff < 10 else 0
+                #     duration = 0
+
+                # Check brightness difference
+                if brightness_percent != prev_brightness:
+                    bright_diff = abs(brightness - (prev_brightness or 0))
+                    duration = 200 if bright_diff < 10 else 0
+                    duration = 0
+
+                    # await bulb.async_set_brightness(brightness, effect="sudden", duration=duration)
+                    await bulb.async_set_brightness(brightness_percent, effect="sudden", duration=duration)
+                    prev_brightness = brightness_percent
+
                 # Wait for 60/120ms before processing next update
-                await asyncio.sleep(0.04)
-                
+                await asyncio.sleep(0.05)
+
             except Exception as e:
                 logger.error(f"Error setting color for bulb {bulb._ip}: {e}")
                 raise e
             finally:
                 # Mark task as done
                 queue.task_done()
-                
+
         except Exception as e:
             logger.error(f"Error in bulb worker for {bulb._ip}: {e}")
             await asyncio.sleep(1)  # Prevent tight loop in case of repeated errors
@@ -177,9 +213,9 @@ async def process_dmx(addr, data, dmx_mapping):
         g = data[8+g_chan] if g_chan < len(data) else 0
         b = data[8+b_chan] if b_chan < len(data) else 0
 
-        brightness = data[8+brightness_chan] * 2 if brightness_chan < len(data) else 255
+        brightness = int(data[8+brightness_chan]) if brightness_chan < len(data) else 255
 
-        logger.debug(f"Updating bulb {bulb._ip} with color ({r}, {g}, {b}, {brightness})")
+        logger.debug(f"Updating bulb {bulb._ip} with color ({r}, {g}, {b}, {brightness} ({data[8+brightness_chan]}))")
         await update_bulb_color(bulb, r, g, b, brightness)
 
 async def cleanup_bulbs(bulbs):
@@ -190,26 +226,31 @@ async def cleanup_bulbs(bulbs):
     """
     for bulb in bulbs:
         await bulb.async_stop_music()
-    
+
     pending = [task for task in asyncio.all_tasks() if not task.done()]
     for task in pending:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
 
 async def main():
-    # Initialize bulb information
-    bulbs_info = [{'ip': '192.168.108.149'}]
-    
+    # Use configuration from config file
+    bulbs_info = BULBS_INFO
+
+    discovered_bulbs = discover_bulbs()
+    logger.info(f"Discovered bulbs: {discovered_bulbs}")
+
     if len(bulbs_info) == 0:
         logger.error("No Yeelight bulbs found")
         return
 
     # Initialize bulbs
     bulbs = await initialize_bulbs(bulbs_info)
-    
-    # Create DMX mapping
-    dmx_mapping = create_dmx_mapping(bulbs)
-    
+
+    # Create DMX mapping using config values
+    dmx_mapping = create_dmx_mapping(bulbs,
+                                   bulbs_info=bulbs_info,
+                                   channels_per_bulb=CHANNELS_PER_BULB)
+
     # Create Art-Net client and connect
     client = ArtNetClient()
     await client.connect()
@@ -221,7 +262,7 @@ async def main():
 
     # Register callback
     client.protocol.handlers[0x5000] = dmx_callback
-    
+
     logger.info("Listening for Art-Net DMX data...")
 
     try:
