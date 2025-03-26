@@ -4,6 +4,7 @@ import asyncio
 
 from yeelight import discover_bulbs
 from yeelight.aio import AsyncBulb
+from yeelight.main import BulbException
 
 from aioartnet import ArtNetClient
 from aioartnet.aio_artnet import swap16
@@ -17,6 +18,7 @@ logger.setLevel(logging.INFO)
 # Create a console handler and set its level to DEBUG
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
+# ch.setLevel(logging.INFO)
 
 # Create a formatter
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s')
@@ -29,7 +31,7 @@ logger.addHandler(ch)
 
 # Set the logging level for aioartnet to a higher level (e.g., INFO or WARNING)
 logging.getLogger('aioartnet').setLevel(logging.INFO)
-logging.getLogger('yeelight').setLevel(logging.DEBUG)
+# logging.getLogger('yeelight').setLevel(logging.DEBUG)
 
 def do_nothing(param):
     logger.debug("do_nothing called with param: %s", param)
@@ -45,6 +47,8 @@ async def initialize_bulbs(bulbs_info):
         bulbs_info (list): List of dictionaries containing bulb IP addresses
     Returns:
         list: List of initialized AsyncBulb objects
+    Raises:
+        Exception: If there's a critical error that should stop the program
     """
     bulbs = []
     for bulb_info in bulbs_info:
@@ -64,9 +68,18 @@ async def initialize_bulbs(bulbs_info):
             # await bulb.async_turn_on()
             await asyncio.sleep(1)
             bulbs.append(bulb)
+        except BulbException as e:
+            if bulbs[-1] == bulb:
+                bulbs.pop()
+
+            logger.error("Error initializing bulb at %s: %s. Skip it", ip, e)
+            continue
         except Exception as e:
-            logger.error("Error initializing bulb at %s: %s", ip, e)
-            raise e
+            logger.error("Critical error initializing bulb at %s: %s", ip, e)
+            raise  # Re-raise the exception to stop the program
+
+    if not bulbs:
+        raise Exception("No bulbs were successfully initialized. Cannot continue.")
 
     logger.info("Found %d bulb(s): %s", len(bulbs), [bulb._ip for bulb in bulbs])
     return bulbs
