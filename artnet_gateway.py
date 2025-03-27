@@ -2,6 +2,7 @@ import struct
 import logging
 import asyncio
 
+import yaml
 from yeelight import discover_bulbs
 from yeelight.aio import AsyncBulb
 from yeelight.main import BulbException
@@ -56,26 +57,36 @@ async def initialize_bulbs(bulbs_info):
         bulb = AsyncBulb(ip, auto_on=False)
         try:
             await bulb.async_listen(do_nothing)
+
+            await bulb.async_stop_music()
             await asyncio.sleep(1)
-            # await bulb.async_stop_music()
-            # logger.info(f"Bulb {ip} stopped music")
-            # await asyncio.sleep(1)
+            logger.info("Bulb %s (%s) stopped music", bulb_info['name'], ip)
+
+            await bulb.async_turn_on()
+            await asyncio.sleep(1)
+            logger.info("Bulb %s (%s) turned on", bulb_info['name'], ip)
+
+            await bulb.async_set_brightness(50)
+            await asyncio.sleep(1)
+            logger.info("Bulb %s (%s) set brightness to %d", bulb_info['name'], ip, 50)
+
             await bulb.async_set_brightness(100)
-            logger.info("Bulb %s set brightness to 100", ip)
             await asyncio.sleep(1)
+            logger.info("Bulb %s (%s) set brightness to %d", bulb_info['name'], ip, 100)
+
             await bulb.async_start_music()
             await asyncio.sleep(1)
-            # await bulb.async_turn_on()
-            await asyncio.sleep(1)
+            logger.info("Bulb %s (%s) started music", bulb_info['name'], ip)
+
             bulbs.append(bulb)
         except BulbException as e:
-            if bulbs[-1] == bulb:
+            if len(bulbs) > 0 and bulbs[-1] == bulb:
                 bulbs.pop()
 
-            logger.error("Error initializing bulb at %s: %s. Skip it", ip, e)
+                logger.error("Error initializing bulb %s (%s): %s. Skip it", bulb_info['name'], ip, e)
             continue
         except Exception as e:
-            logger.error("Critical error initializing bulb at %s: %s", ip, e)
+            logger.error("Critical error initializing bulb at %s (%s): %s", bulb_info['name'], ip, e)
             raise  # Re-raise the exception to stop the program
 
     if not bulbs:
@@ -194,7 +205,7 @@ async def bulb_state_worker(bulb):
 
         except Exception as e:
             logger.error("Error in bulb worker for %s: %s", bulb._ip, e)
-            await asyncio.sleep(1)  # Prevent tight loop in case of repeated errors
+            await asyncio.sleep(5)  # Prevent tight loop in case of repeated errors
 
 async def process_dmx(addr, data, dmx_mapping):
     """Process incoming DMX data and update bulbs accordingly
@@ -253,7 +264,15 @@ async def main():
     bulbs_info = BULBS_INFO
 
     discovered_bulbs = discover_bulbs()
-    logger.info("Discovered bulbs: %s", discovered_bulbs)
+    discover_bulbs_summary = [{
+        'ip': b['ip'],
+        'id': b['capabilities']['id'],
+        'power': b['capabilities']['power'],
+        'model': b['capabilities']['model'],
+        'support': b['capabilities']['support'],
+    } for b in discovered_bulbs]
+
+    logger.info("Discovered bulbs: %s", yaml.dump(discover_bulbs_summary))
 
     if len(bulbs_info) == 0:
         logger.error("No Yeelight bulbs found")

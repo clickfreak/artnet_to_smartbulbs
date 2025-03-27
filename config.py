@@ -20,9 +20,9 @@ BULBS_INFO = [
         'name': 'desktop lamp',
         'dmx_start': 6
     },
-    # {'ip': '192.168.108.249', 'name': 'bedroom lamp 1', 'dmx_start': 16},
+    {'ip': '192.168.108.249', 'name': 'bedroom lamp 1', 'dmx_start': 1},
     # {'ip': '192.168.108.110', 'name': 'Corner Lamp (bathroom)', 'dmx_start': 21},
-    # {'ip': '192.168.108.189', 'name': 'Kitchen', 'dmx_start': 26},
+    {'ip': '192.168.108.189', 'name': 'Kitchen', 'dmx_start': 6},
 ]
 
 # You can add other configuration parameters here
