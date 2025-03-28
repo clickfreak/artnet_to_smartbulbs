@@ -58,25 +58,29 @@ async def initialize_bulbs(bulbs_info):
         try:
             await bulb.async_listen(do_nothing)
 
-            await bulb.async_stop_music()
+            await bulb.async_turn_off()
             await asyncio.sleep(1)
-            logger.info("Bulb %s (%s) stopped music", bulb_info['name'], ip)
+            logger.info("Bulb %s (%s) turned off", bulb_info['name'], ip)
 
             await bulb.async_turn_on()
             await asyncio.sleep(1)
             logger.info("Bulb %s (%s) turned on", bulb_info['name'], ip)
 
-            await bulb.async_set_brightness(50)
-            await asyncio.sleep(1)
-            logger.info("Bulb %s (%s) set brightness to %d", bulb_info['name'], ip, 50)
-
-            await bulb.async_set_brightness(100)
-            await asyncio.sleep(1)
-            logger.info("Bulb %s (%s) set brightness to %d", bulb_info['name'], ip, 100)
+            # bulb.stop_music()
+            # await asyncio.sleep(1)
+            # logger.info("Bulb %s (%s) stopped music", bulb_info['name'], ip)
 
             await bulb.async_start_music()
             await asyncio.sleep(1)
             logger.info("Bulb %s (%s) started music", bulb_info['name'], ip)
+
+            await bulb.async_set_brightness(30)
+            await asyncio.sleep(1)
+            logger.info("Bulb %s (%s) set brightness to %d", bulb_info['name'], ip, 30)
+
+            await bulb.async_set_brightness(100)
+            await asyncio.sleep(1)
+            logger.info("Bulb %s (%s) set brightness to %d", bulb_info['name'], ip, 100)
 
             bulbs.append(bulb)
         except BulbException as e:
@@ -95,7 +99,7 @@ async def initialize_bulbs(bulbs_info):
     logger.info("Found %d bulb(s): %s", len(bulbs), [bulb._ip for bulb in bulbs])
     return bulbs
 
-def create_dmx_mapping(bulbs, bulbs_info, channels_per_bulb=5):
+def create_dmx_mapping(bulbs, bulbs_info, channels_per_bulb=4):
     """Create mapping between DMX channels and bulbs
     
     Args:
@@ -116,7 +120,7 @@ def create_dmx_mapping(bulbs, bulbs_info, channels_per_bulb=5):
             'r': dmx_start,
             'g': dmx_start + 1,
             'b': dmx_start + 2,
-            'brightness': dmx_start + 4
+            'brightness': dmx_start + 3
         }
 
     logger.info("DMX channels used: 1-%d", max_channel)
@@ -162,7 +166,7 @@ async def bulb_state_worker(bulb):
             r, g, b, brightness = await queue.get()
 
             try:
-                brightness_percent = max(min(int((brightness / 128) * 100), 100), 0)
+                brightness_percent = max(min(int((brightness / 256) * 100), 100), 0)
                 logger.debug("brightness_percent is %d", brightness_percent)
 
                 # Check RGB difference

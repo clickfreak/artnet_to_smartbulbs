@@ -18,14 +18,14 @@ BULBS_INFO = [
     {
         'ip': '192.168.108.149',
         'name': 'desktop lamp',
-        'dmx_start': 6
+        'dmx_start': 5
     },
-    {'ip': '192.168.108.249', 'name': 'bedroom lamp 1', 'dmx_start': 1},
+    {'ip': '192.168.108.249', 'name': 'bedroom lamp 1', 'dmx_start': 9},
     # {'ip': '192.168.108.110', 'name': 'Corner Lamp (bathroom)', 'dmx_start': 21},
-    {'ip': '192.168.108.189', 'name': 'Kitchen', 'dmx_start': 6},
+    {'ip': '192.168.108.189', 'name': 'Kitchen', 'dmx_start': 13},
 ]
 
 # You can add other configuration parameters here
 DMX_START_ADDRESS = 1
-CHANNELS_PER_BULB = 5
-INPUT_FLOWS = 2
+CHANNELS_PER_BULB = 4
+INPUT_FLOWS = 4
