@@ -9,13 +9,49 @@ Why? We have so many interesting smart things around us, but we use only a small
 
 * * * * *
 
+Installation
+------------
+
+1. Clone the repository:
+```bash
+git clone https://github.com/clickfreak/artnet_to_smartbulbs.git
+cd artnet_to_smartbulbs
+```
+
+2. Create and activate a virtual environment (recommended):
+```bash
+python -m venv venv
+source venv/bin/activate  # On Linux/macOS
+# or
+.\venv\Scripts\activate  # On Windows
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+or
+```bash
+pip install yeelight aioartnet pyyaml
+```
+
+4. Configure your bulbs in `config.py` (see Configuration section below)
+
+5. Run artnet source (EngineDJ, SoundSwitch, etc)
+
+6. Run the gateway:
+```bash
+python artnet_gateway.py
+```
+
+
 Project Flow and Components
 --------------------------
 
 ```mermaid
 flowchart LR
     subgraph Network ["Local Network (Router)"]
-        A[Art-Net Source<br/>DJ Software/Controller] -->|Art-Net DMX\nUDP Port 6454| B[Art-Net Gateway App]
+        A[Art-Net Source<br/>DJ Software/Controller] -->|Art-Net DMX<br/>UDP Port 6454| B[Art-Net Gateway App]
         B -->|Music Mode| C[Yeelight Bulb 1]
         B -->|Music Mode| D[Yeelight Bulb 2]
         B -->|Music Mode| E[Yeelight Bulb n]

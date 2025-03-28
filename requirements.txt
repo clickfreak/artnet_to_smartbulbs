@@ -1,0 +1,3 @@
+yeelight>=0.7.8
+aioartnet>=0.1.0
+pyyaml
